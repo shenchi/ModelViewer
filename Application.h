@@ -28,6 +28,7 @@ protected:
 	ID3D11DeviceContext*		context;
 
 	ID3D11RenderTargetView*		rtv;
+	ID3D11DepthStencilView*		dsv;
 
 private:
 	int32_t init_direct3d();

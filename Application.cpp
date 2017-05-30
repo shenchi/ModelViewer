@@ -210,13 +210,37 @@ int32_t Application::init_direct3d()
 			if (S_OK != swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer)))
 				break;
 
-			if (S_OK != device->CreateRenderTargetView(backBuffer, nullptr, &rtv))
-				break;
+			ret = device->CreateRenderTargetView(backBuffer, nullptr, &rtv);
 
 			backBuffer->Release();
+
+			if (S_OK != ret)
+				break;
 		}
 
-		context->OMSetRenderTargets(1, &rtv, nullptr);
+		{
+			ID3D11Texture2D* depthBuffer = nullptr;
+
+			CD3D11_TEXTURE2D_DESC desc(
+				DXGI_FORMAT_D24_UNORM_S8_UINT,
+				bufferWidth,
+				bufferHeight,
+				1, 0, D3D11_BIND_DEPTH_STENCIL);
+
+			if (S_OK != device->CreateTexture2D(&desc, nullptr, &depthBuffer))
+				break;
+
+			ret = device->CreateDepthStencilView(depthBuffer, nullptr, &dsv);
+
+			depthBuffer->Release();
+
+			if (S_OK != ret)
+			{
+				break;
+			}
+		}
+
+		context->OMSetRenderTargets(1, &rtv, dsv);
 
 		// now we can trigger WM_SIZE message
 		ShowWindow(hWnd, SW_SHOW);
@@ -237,6 +261,7 @@ int32_t Application::cleanup()
 {
 	ImGui_ImplDX11_Shutdown();
 
+	dsv->Release();
 	rtv->Release();
 	swapChain->Release();
 	context->Release();
@@ -261,6 +286,26 @@ void Application::on_resize(uint32_t width, uint32_t height)
 	assert(S_OK == device->CreateRenderTargetView(backBuffer, nullptr, &rtv));
 
 	backBuffer->Release();
+
+	dsv->Release();
+
+	{
+		ID3D11Texture2D* depthBuffer = nullptr;
+
+		CD3D11_TEXTURE2D_DESC desc(
+			DXGI_FORMAT_D24_UNORM_S8_UINT,
+			width,
+			height,
+			1, 0, D3D11_BIND_DEPTH_STENCIL);
+
+		assert(S_OK == device->CreateTexture2D(&desc, nullptr, &depthBuffer));
+		
+		assert(S_OK ==  device->CreateDepthStencilView(depthBuffer, nullptr, &dsv));
+
+		depthBuffer->Release();
+	}
+
+	context->OMSetRenderTargets(1, &rtv, dsv);
 
 	bufferWidth = width;
 	bufferHeight = height;
@@ -293,6 +338,7 @@ void Application::on_tick()
 
 	float color[] = { 0.3f, 0.3f, 0.3f, 1.0f };
 	context->ClearRenderTargetView(rtv, color);
+	context->ClearDepthStencilView(dsv, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
 	render();
 
