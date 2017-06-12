@@ -84,6 +84,8 @@ LRESULT Application::wnd_proc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
 {
 	bool imgui_processed = ImGui_ImplDX11_WndProcHandler(hWnd, message, wParam, lParam);
 
+	if (imgui_processed) return true;
+
 	switch (message)
 	{
 	case WM_DESTROY:
@@ -241,6 +243,8 @@ int32_t Application::init_direct3d()
 		}
 
 		context->OMSetRenderTargets(1, &rtv, dsv);
+		D3D11_VIEWPORT vp = { 0, 0, bufferWidth, bufferHeight, 0.0f ,1.0f };
+		context->RSSetViewports(1, &vp);
 
 		// now we can trigger WM_SIZE message
 		ShowWindow(hWnd, SW_SHOW);
@@ -299,13 +303,15 @@ void Application::on_resize(uint32_t width, uint32_t height)
 			1, 0, D3D11_BIND_DEPTH_STENCIL);
 
 		assert(S_OK == device->CreateTexture2D(&desc, nullptr, &depthBuffer));
-		
-		assert(S_OK ==  device->CreateDepthStencilView(depthBuffer, nullptr, &dsv));
+
+		assert(S_OK == device->CreateDepthStencilView(depthBuffer, nullptr, &dsv));
 
 		depthBuffer->Release();
 	}
 
 	context->OMSetRenderTargets(1, &rtv, dsv);
+	D3D11_VIEWPORT vp = { 0, 0, width, height, 0.0f ,1.0f };
+	context->RSSetViewports(1, &vp);
 
 	bufferWidth = width;
 	bufferHeight = height;

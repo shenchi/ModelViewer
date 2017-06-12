@@ -68,6 +68,9 @@
     <ClInclude Include="ModelViewer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Bone.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="VertexShader.hlsl">
