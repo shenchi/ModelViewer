@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+
 struct Bone
 {
 	float		matrix[12];
@@ -10,3 +11,4 @@ struct Bone
 	int32_t		nextSibling;
 	int32_t		name;
 };
+

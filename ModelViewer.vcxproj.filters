@@ -71,6 +71,12 @@
     <ClInclude Include="Bone.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="TofuMath.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TofuMesh.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="VertexShader.hlsl">

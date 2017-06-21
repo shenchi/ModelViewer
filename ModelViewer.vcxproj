@@ -175,7 +175,9 @@
     <ClInclude Include="imgui\stb_rect_pack.h" />
     <ClInclude Include="imgui\stb_textedit.h" />
     <ClInclude Include="imgui\stb_truetype.h" />
+    <ClInclude Include="TofuMesh.h" />
     <ClInclude Include="ModelViewer.h" />
+    <ClInclude Include="TofuMath.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="PixelShader.hlsl">
