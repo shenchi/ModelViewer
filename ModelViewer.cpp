@@ -18,74 +18,10 @@
 #include <d3dcompiler.h>
 #pragma comment (lib, "d3dcompiler.lib")
 
-namespace
-{
-	void perspective(float* out, float fov, float aspect, float zNear, float zFar)
-	{
-		float yScale = 1.0f / std::tanf(fov * 0.5f);
-		float xScale = yScale / aspect;
-		float zScale = zFar / (zFar - zNear);
-		float zOffset = zFar * zNear / (zNear - zFar);
+#pragma warning(disable : 4996) 
 
-		float matrix[] = {
-			xScale, 0.0f, 0.0f, 0.0f,
-			0.0f, yScale, 0.0f, 0.0f,
-			0.0f, 0.0f, zScale, zOffset,
-			0.0f, 0.0f, 1.0, 0.0f,
-		};
-
-		for (uint32_t i = 0; i < 16; i++) out[i] = matrix[i];
-	}
-
-	void translate(float* out, float x, float y, float z)
-	{
-		float matrix[] = {
-			1.0f, 0.0f, 0.0f, x,
-			0.0f, 1.0f, 0.0f, y,
-			0.0f, 0.0f, 1.0f, z,
-			0.0f, 0.0f, 0.0f, 1.0f,
-		};
-
-		for (uint32_t i = 0; i < 16; i++) out[i] = matrix[i];
-	};
-
-	void scale(float* out, float x, float y, float z)
-	{
-		float matrix[] = {
-			x   , 0.0f, 0.0f, 0.0f,
-			0.0f, y   , 0.0f, 0.0f,
-			0.0f, 0.0f, z   , 0.0f,
-			0.0f, 0.0f, 0.0f, 1.0f,
-		};
-
-		for (uint32_t i = 0; i < 16; i++) out[i] = matrix[i];
-	};
-
-	void identity(float* out)
-	{
-		float matrix[] = {
-			1.0f, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f,
-			0.0f, 0.0f, 0.0f, 1.0f,
-		};
-
-		for (uint32_t i = 0; i < 16; i++) out[i] = matrix[i];
-	}
-
-	void trans1(float* out)
-	{
-		float matrix[] = {
-			0.01f, 0.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, -0.01f, 0.0f,
-			0.0f, 0.01f, 0.0f, 0.0f,
-			0.0f, 0.0f, 0.0f, 1.0f,
-		};
-
-		for (uint32_t i = 0; i < 16; i++) out[i] = matrix[i];
-	}
-}
-
+using namespace tofu;
+using namespace tofu::math;
 
 int32_t ModelViewer::init_assets()
 {
@@ -118,7 +54,10 @@ int32_t ModelViewer::init_assets()
 
 			D3D11_INPUT_ELEMENT_DESC descs[] =
 			{
-				{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0}
+				{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, sizeof(float3) * 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+				{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, sizeof(float3) * 1, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+				{ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, sizeof(float3) * 2, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+				{ "TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, sizeof(float3) * 3, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 			};
 
 			uint32_t numDesc = sizeof(descs) / sizeof(D3D11_INPUT_ELEMENT_DESC);
@@ -246,17 +185,16 @@ void ModelViewer::update()
 		return;
 
 	{
-		float* data = reinterpret_cast<float*>(res.pData);
+		float4x4* data = reinterpret_cast<float4x4*>(res.pData);
 
-		translate(data, 0.0f, 0.0f, 2.0f);
+		*data = translate(0.0f, 0.0f, 2.0f);
 
 		float fov = 3.14159f * 0.5f;
 		float aspect = (float)bufferWidth / bufferHeight;
 		float zNear = 0.01f;
 		float zFar = 100.0f;
 
-		perspective(data + 16, fov, aspect, zNear, zFar);
-
+		*(data + 1) = perspective(fov, aspect, zNear, zFar);
 
 		context->Unmap(frameCB, 0);
 	}
@@ -265,11 +203,9 @@ void ModelViewer::update()
 		return;
 
 	{
-		float* data = reinterpret_cast<float*>(res.pData);
+		float4x4* data = reinterpret_cast<float4x4*>(res.pData);
 
-		//identity(data);
-		//scale(data, 0.01f, 0.01f, 0.01f);
-		trans1(data);
+		*(data) = identity();
 
 		context->Unmap(instanceCB, 0);
 	}
@@ -278,7 +214,8 @@ void ModelViewer::update()
 
 void ModelViewer::render()
 {
-	render_meshes();
+	//render_meshes();
+	render_scene();
 }
 
 void ModelViewer::gui()
@@ -288,6 +225,7 @@ void ModelViewer::gui()
 	gui_hierarchy();
 	gui_meshes();
 	gui_animations();
+	gui_tracks();
 	gui_skeleton();
 }
 
@@ -458,11 +396,42 @@ void ModelViewer::gui_animations()
 			const char* name = scene->mAnimations[i]->mName.C_Str();
 			if (ImGui::Selectable(name, i == selectedAnimation))
 			{
+				if (selectedAnimation != i)
+				{
+					aiAnimation* a = scene->mAnimations[i];
+					anim.numTracks = a->mNumChannels;
+					// TODO
+
+					//scene->mAnimations[i]->mChannels;
+				}
 				selectedAnimation = i;
 			}
 		}
 
 	} while (0);
+
+	ImGui::End();
+}
+
+void ModelViewer::gui_tracks()
+{
+	ImGui::SetNextWindowPos(ImVec2(10, 40), ImGuiSetCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2(200, 600), ImGuiSetCond_FirstUseEver);
+	if (!ImGui::Begin("Tracks")) return;
+
+	if (scene != nullptr && selectedAnimation != -1)
+	{
+		aiAnimation* a = scene->mAnimations[selectedAnimation];
+		for (uint32_t i = 0; i < a->mNumChannels; i++)
+		{
+			aiNodeAnim* ch = a->mChannels[i];
+			ImGui::Text("%s (T: %u, R: %u, S: %u)", 
+				ch->mNodeName.C_Str(), 
+				ch->mNumPositionKeys,
+				ch->mNumRotationKeys,
+				ch->mNumScalingKeys);
+		}
+	}
 
 	ImGui::End();
 }
@@ -541,7 +510,10 @@ void ModelViewer::load_model(const wchar_t * filename)
 	numMeshes = 0;
 
 	const aiScene* scene = importer->ReadFile(fn.c_str(), 
-		aiProcess_Triangulate | aiProcess_ConvertToLeftHanded);
+		aiProcess_Triangulate | 
+		aiProcess_GenNormals |
+		aiProcess_CalcTangentSpace |
+		aiProcess_ConvertToLeftHanded);
 
 	if (scene == nullptr)
 		return;
@@ -565,9 +537,15 @@ void ModelViewer::load_model(const wchar_t * filename)
 		aiMesh* m = scene->mMeshes[i];
 		for (uint32_t j = 0; j < m->mNumVertices; j++)
 		{
-			vertices[vid + j].x = m->mVertices[j].x;
-			vertices[vid + j].y = m->mVertices[j].y;
-			vertices[vid + j].z = m->mVertices[j].z;
+			auto& pos = m->mVertices[j];
+			auto& norm = m->mNormals[j];
+			auto& tan = m->mTangents[j];
+			auto& uv = m->mTextureCoords[0][j];
+
+			vertices[vid + j].position = float3{ pos.x, pos.y, pos.z };
+			vertices[vid + j].normal = float3{ norm.x, norm.y, norm.z };
+			vertices[vid + j].tangent = float3{ tan.x, tan.y, tan.z };
+			vertices[vid + j].uv = float3{ uv.x, uv.y, uv.z };
 		}
 
 		for (uint32_t j = 0; j < m->mNumFaces; j++)
@@ -643,11 +621,67 @@ void ModelViewer::render_meshes()
 	}
 }
 
+void ModelViewer::render_scene()
+{
+	if (numMeshes == 0 || nullptr == scene) return;
+
+	UINT strides[] = { sizeof(Vertex) };
+	UINT offsets[] = { 0 };
+
+	context->VSSetShader(vertexShader, nullptr, 0);
+	context->PSSetShader(pixelShader, nullptr, 0);
+	context->IASetInputLayout(inputLayout);
+	context->IASetVertexBuffers(0, 1, &vertexBuffer, strides, offsets);
+	context->IASetIndexBuffer(indexBuffer, DXGI_FORMAT_R32_UINT, 0);
+
+	context->RSSetState(rsState);
+	context->OMSetDepthStencilState(dsState, 0);
+	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	ID3D11Buffer* cbs[] = { instanceCB, frameCB };
+	context->VSSetConstantBuffers(0, 2, cbs);
+
+	render_scene_node(scene->mRootNode, translate(0.0f, -1.0f, 0.0f) * 
+		rotate(quat(3.14159f * totalTime, float3{0.0f, 1.0f, 0.0f})) *
+		scale(0.01f));
+}
+
+void ModelViewer::render_scene_node(aiNode * node, float4x4 parentTransform)
+{
+	float4x4 current = parentTransform * reinterpret_cast<float4x4&>(node->mTransformation);
+
+	if (node->mNumMeshes > 0)
+	{
+		D3D11_MAPPED_SUBRESOURCE res = {};
+		if (S_OK == context->Map(instanceCB, 0, D3D11_MAP_WRITE_DISCARD, 0, &res))
+		{
+			float4x4* data = reinterpret_cast<float4x4*>(res.pData);
+
+			*(data) = current;
+
+			context->Unmap(instanceCB, 0);
+		}
+	}
+
+	for (uint32_t i = 0; i < node->mNumMeshes; i++)
+	{
+		Mesh& m = meshes[node->mMeshes[i]];
+
+		context->DrawIndexed(m.numIndices, m.startIndex, m.startVertex);
+	}
+
+	for (uint32_t i = 0; i < node->mNumChildren; i++)
+	{
+		render_scene_node(node->mChildren[i], current);
+	}
+}
+
 int32_t ModelViewer::generate_skeleton(aiNode * node)
 {
 	selectedBone = -1;
 	numBones = 0;
 	boneNameArraySize = 0;
+	boneTable.clear();
 
 	aiNode* root = node;
 
@@ -702,6 +736,9 @@ int32_t ModelViewer::generate_skeleton_node(aiNode * node, int32_t parentBoneIdx
 	strcpy(&boneNameArray[boneNameArraySize], nodeName.c_str());
 	boneNameArraySize += uint32_t(nodeName.length()) + 1;
 
+	assert(boneTable.find(nodeName) == boneTable.end());
+	boneTable.insert(std::pair<std::string, int32_t>(nodeName, boneId));
+
 	for (uint32_t i = 0; i < 3; i++)
 		for (uint32_t j = 0; j < 4; j++)
 			bone.matrix[i * 4 + j] = matrix[i][j];
@@ -719,6 +756,18 @@ int32_t ModelViewer::generate_skeleton_node(aiNode * node, int32_t parentBoneIdx
 	}
 
 	return boneId;
+}
+
+int32_t ModelViewer::generate_animation(aiAnimation* anim)
+{
+	if (nullptr == anim) return -1;
+
+	for (uint32_t i = 0; i < anim->mNumChannels; ++i)
+	{
+		//anim->mChannels[i]->mPositionKeys
+	}
+
+	return 0;
 }
 
 int32_t ModelViewer::compile_shader(const char * src, uint32_t size, const char * entry, const char * target, ID3DBlob ** blob)

@@ -1,11 +1,20 @@
 #pragma once
 
 #include "Application.h"
-#include "Bone.h"
+#include "TofuMesh.h"
+#include <unordered_map>
+#include <string>
 
 struct aiScene;
 struct aiNode;
+struct aiAnimation;
 struct ImGuiTextBuffer;
+
+using tofu::math::float4x4;
+using tofu::Mesh;
+using tofu::Bone;
+using tofu::Vertex;
+using tofu::Animation;
 
 namespace Assimp
 {
@@ -48,6 +57,8 @@ private:
 
 	void gui_animations();
 
+	void gui_tracks();
+
 	void gui_skeleton();
 
 	void gui_skeleton_node(int32_t node);
@@ -62,29 +73,17 @@ private:
 	ID3D11RasterizerState*		rsState;
 	ID3D11DepthStencilState*	dsState;
 
-	struct Vertex
-	{
-		float x, y, z;
-	};
-
 	ID3D11Buffer*		vertexBuffer;
 	ID3D11Buffer*		indexBuffer;
 	uint32_t			numVertices;
 	uint32_t			numIndices;
-
-	struct Mesh
-	{
-		uint32_t		startVertex;
-		uint32_t		startIndex;
-		uint32_t		numVertices;
-		uint32_t		numIndices;
-	};
 
 	Mesh				meshes[1024];
 	uint32_t			numMeshes;
 
 	Bone				bones[1024];
 	uint32_t			numBones;
+	std::unordered_map<std::string, int32_t> boneTable;
 
 	char				boneNameArray[2048];
 	uint32_t			boneNameArraySize;
@@ -92,13 +91,19 @@ private:
 	ID3D11Buffer*		instanceCB;
 	ID3D11Buffer*		frameCB;
 
+	Animation			anim;
+
 private:
 
 	void render_meshes();
+	void render_scene();
+	void render_scene_node(aiNode* node, float4x4 parentTransform);
 
 	int32_t generate_skeleton(aiNode* node);
 
 	int32_t generate_skeleton_node(aiNode* node, int32_t parentBoneIdx);
+
+	int32_t generate_animation(aiAnimation* anim);
 
 	int32_t compile_shader(const char* src, uint32_t size, const char* entry, const char* target, ID3DBlob** blob);
 	int32_t load_file_to_blob(const wchar_t* filename, ID3DBlob** blob);

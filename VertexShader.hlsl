@@ -12,6 +12,9 @@ cbuffer FrameConstants : register (b1)
 struct Input
 {
 	float3	position : POSITION;
+	float3	normal : NORMAL;
+	float3	tangent : TANGENT;
+	float3	texcoord : TEXCOORD;
 };
 
 struct V2F

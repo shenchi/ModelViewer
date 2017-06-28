@@ -133,6 +133,12 @@ namespace tofu
 			return std::sqrtf(a.x * a.x + a.y * a.y);
 		}
 
+		inline float2 normalize(const float2& a)
+		{
+			float l = length(a);
+			return a / l;
+		}
+
 
 		// float3
 
@@ -223,6 +229,12 @@ namespace tofu
 		inline float length(const float3& a)
 		{
 			return std::sqrtf(a.x * a.x + a.y * a.y + a.z * a.z);
+		}
+
+		inline float3 normalize(const float3& a)
+		{
+			float l = length(a);
+			return a / l;
 		}
 
 
@@ -325,6 +337,12 @@ namespace tofu
 			return std::sqrtf(a.x * a.x + a.y * a.y + a.z * a.z);
 		}
 
+		// w is ignored
+		inline float4 normalize(const float4& a)
+		{
+			float l = length(a);
+			return a / l;
+		}
 
 		// quaternion
 
@@ -348,7 +366,7 @@ namespace tofu
 
 		// row vector
 		// TODO optimize it
-		inline float4 mul(const float4& a, const float4x4& b)
+		inline float4 operator * (const float4& a, const float4x4& b)
 		{
 			return float4{
 				a.x * b.x.x + a.y * b.y.x + a.z * b.z.x + a.w * b.w.x,
@@ -360,7 +378,7 @@ namespace tofu
 
 		// column vector
 		// TODO optimize it
-		inline float4 mul(const float4x4& a, const float4& b)
+		inline float4 operator * (const float4x4& a, const float4& b)
 		{
 			return float4{
 				a.x.x * b.x + a.x.y * b.y + a.x.z * b.z + a.x.w * b.w,
@@ -371,13 +389,13 @@ namespace tofu
 		}
 
 		// TODO optimize it
-		inline float4x4 mul(const float4x4& a, const float4x4& b)
+		inline float4x4 operator * (const float4x4& a, const float4x4& b)
 		{
 			return float4x4{
-				mul(a.x, b),
-				mul(a.y, b),
-				mul(a.z, b),
-				mul(a.w, b)
+				operator * (a.x, b),
+				operator * (a.y, b),
+				operator * (a.z, b),
+				operator * (a.w, b)
 			};
 		}
 
@@ -398,21 +416,6 @@ namespace tofu
 				float4{ 0.0f, 1.0f, 0.0f, 0.0f },
 				float4{ 0.0f, 0.0f, 1.0f, 0.0f },
 				float4{ 0.0f, 0.0f, 0.0f, 1.0f }
-			};
-		}
-
-		inline float4x4 perspective(float fov, float aspect, float zNear, float zFar)
-		{
-			float yScale = 1.0f / std::tanf(fov * 0.5f);
-			float xScale = yScale / aspect;
-			float zScale = zFar / (zFar - zNear);
-			float zOffset = zFar * zNear / (zNear - zFar);
-
-			return float4x4{
-				float4{ xScale, 0.0f, 0.0f, 0.0f },
-				float4{ 0.0f, yScale, 0.0f, 0.0f },
-				float4{ 0.0f, 0.0f, zScale, zOffset },
-				float4{ 0.0f, 0.0f, 1.0, 0.0f }
 			};
 		}
 
@@ -438,7 +441,26 @@ namespace tofu
 
 		inline float4x4 rotate(const float4& q)
 		{
+			float a_sqr = q.w * q.w;
+			float b_sqr = q.x * q.x;
+			float c_sqr = q.y * q.y;
+			float d_sqr = q.z * q.z;
 
+			float a_b_2 = q.w * q.x * 2;
+			float a_c_2 = q.w * q.y * 2;
+			float a_d_2 = q.w * q.z * 2;
+
+			float b_c_2 = q.x * q.y * 2;
+			float b_d_2 = q.x * q.z * 2;
+
+			float c_d_2 = q.y * q.z * 2;
+
+			return float4x4{
+				float4{ a_sqr + b_sqr - c_sqr - d_sqr, b_c_2 - a_d_2, a_c_2 + b_d_2, 0.0f },
+				float4{ a_d_2 + b_c_2, a_sqr - b_sqr + c_sqr - d_sqr, c_d_2 - a_b_2, 0.0f },
+				float4{ b_d_2 - a_c_2, a_b_2 + c_d_2, a_sqr - b_sqr - c_sqr + d_sqr, 0.0f },
+				float4{ 0.0f, 0.0f, 0.0f, 1.0f }
+			};
 		}
 
 		inline float4x4 scale(const float3& s)
@@ -468,6 +490,39 @@ namespace tofu
 				float4{ 0.0f, y, 0.0f, 0.0f },
 				float4{ 0.0f, 0.0f, z, 0.0f },
 				float4{ 0.0f, 0.0f, 0.0f, 1.0f }
+			};
+		}
+
+		inline float4x4 lookTo(const float3& position, const float3& direction, const float3& up)
+		{
+			float3 z = normalize(direction);
+			float3 x = normalize(cross(normalize(up), z));
+			float3 y = cross(z, x);
+			return float4x4{
+				float4{ x.x, x.y, x.z, position.x },
+				float4{ y.x, y.y, y.z, position.y },
+				float4{ z.x, z.y, z.z, position.z },
+				float4{ 0.0f, 0.0f, 0.0f, 1.0f }
+			};
+		}
+
+		inline float4x4 lookAt(const float3& position, const float3& target, const float3& up)
+		{
+			return lookTo(position, target - position, up);
+		}
+
+		inline float4x4 perspective(float fov, float aspect, float zNear, float zFar)
+		{
+			float yScale = 1.0f / std::tanf(fov * 0.5f);
+			float xScale = yScale / aspect;
+			float zScale = zFar / (zFar - zNear);
+			float zOffset = zFar * zNear / (zNear - zFar);
+
+			return float4x4{
+				float4{ xScale, 0.0f, 0.0f, 0.0f },
+				float4{ 0.0f, yScale, 0.0f, 0.0f },
+				float4{ 0.0f, 0.0f, zScale, zOffset },
+				float4{ 0.0f, 0.0f, 1.0, 0.0f }
 			};
 		}
 	}
