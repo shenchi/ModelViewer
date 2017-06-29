@@ -54,10 +54,12 @@ int32_t ModelViewer::init_assets()
 
 			D3D11_INPUT_ELEMENT_DESC descs[] =
 			{
-				{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, sizeof(float3) * 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-				{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, sizeof(float3) * 1, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-				{ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, sizeof(float3) * 2, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-				{ "TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, sizeof(float3) * 3, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+				{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+				{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+				{ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+				{ "TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+				{ "TEXCOORD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+				{ "TEXCOORD", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 			};
 
 			uint32_t numDesc = sizeof(descs) / sizeof(D3D11_INPUT_ELEMENT_DESC);
@@ -134,14 +136,16 @@ int32_t ModelViewer::init_assets()
 			context->OMSetDepthStencilState(dsState, 0);
 		}
 
-		numBones = 0;
-		boneNameArraySize = 0;
+		bonesCB = nullptr;
+
+		bones.clear();
+		boneNameArray.clear();
 
 		vertexBuffer = nullptr;
 		indexBuffer = nullptr;
 		numVertices = 0;
 		numIndices = 0;
-		numMeshes = 0;
+		meshes.clear();
 
 		return 0;
 
@@ -165,6 +169,7 @@ void ModelViewer::cleanup_assets()
 	if (nullptr != vertexBuffer) vertexBuffer->Release();
 	if (nullptr != indexBuffer) indexBuffer->Release();
 
+	if (nullptr != bonesCB) bonesCB->Release();
 	if (nullptr != instanceCB) instanceCB->Release();
 	if (nullptr != frameCB) frameCB->Release();
 	if (nullptr != rsState) rsState->Release();
@@ -398,11 +403,7 @@ void ModelViewer::gui_animations()
 			{
 				if (selectedAnimation != i)
 				{
-					aiAnimation* a = scene->mAnimations[i];
-					anim.numTracks = a->mNumChannels;
-					// TODO
-
-					//scene->mAnimations[i]->mChannels;
+					generate_animation(scene->mAnimations[i]);
 				}
 				selectedAnimation = i;
 			}
@@ -442,13 +443,13 @@ void ModelViewer::gui_skeleton()
 	ImGui::SetNextWindowSize(ImVec2(200, 600), ImGuiSetCond_FirstUseEver);
 	if (!ImGui::Begin("Skeleton")) return;
 
-	if (numBones > 0)
+	if (bones.size() > 0)
 	{
 		gui_skeleton_node(0);
 
 		ImGui::Separator();
 
-		if (selectedBone >= 0 && selectedBone < numBones)
+		if (selectedBone >= 0 && selectedBone < bones.size())
 		{
 			float* m = bones[selectedBone].matrix;
 			
@@ -473,7 +474,7 @@ void ModelViewer::gui_skeleton_node(int32_t node)
 		flags |= (ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen);
 	}
 
-	bool open = ImGui::TreeNodeEx(&boneNameArray[bones[node].name], flags);
+	bool open = ImGui::TreeNodeEx(&(boneNameArray[bones[node].name]), flags);
 	if (ImGui::IsItemClicked())
 	{
 		selectedBone = node;
@@ -507,7 +508,7 @@ void ModelViewer::load_model(const wchar_t * filename)
 	indexBuffer = nullptr;
 	numVertices = 0;
 	numIndices = 0;
-	numMeshes = 0;
+	meshes.clear();
 
 	const aiScene* scene = importer->ReadFile(fn.c_str(), 
 		aiProcess_Triangulate | 
@@ -529,7 +530,7 @@ void ModelViewer::load_model(const wchar_t * filename)
 
 	if (numVertices == 0) return;
 
-	Vertex* vertices = new Vertex[numVertices];
+	SkinnedVertex* vertices = new SkinnedVertex[numVertices];
 	int32_t* indices = new int32_t[numIndices];
 	uint32_t vid = 0, iid = 0;
 	for (uint32_t i = 0; i < scene->mNumMeshes; i++)
@@ -546,6 +547,7 @@ void ModelViewer::load_model(const wchar_t * filename)
 			vertices[vid + j].normal = float3{ norm.x, norm.y, norm.z };
 			vertices[vid + j].tangent = float3{ tan.x, tan.y, tan.z };
 			vertices[vid + j].uv = float3{ uv.x, uv.y, uv.z };
+			//vertices[vid + j].bones.x = m->
 		}
 
 		for (uint32_t j = 0; j < m->mNumFaces; j++)
@@ -555,11 +557,12 @@ void ModelViewer::load_model(const wchar_t * filename)
 			indices[iid + j * 3 + 2] = m->mFaces[j].mIndices[2];
 		}
 
-		meshes[numMeshes].startVertex = vid;
-		meshes[numMeshes].startIndex = iid;
-		meshes[numMeshes].numVertices = m->mNumVertices;
-		meshes[numMeshes].numIndices = m->mNumFaces * 3;
-		numMeshes++;
+		Mesh mesh;
+		mesh.startVertex = vid;
+		mesh.startIndex = iid;
+		mesh.numVertices = m->mNumVertices;
+		mesh.numIndices = m->mNumFaces * 3;
+		meshes.push_back(mesh);
 
 		vid += m->mNumVertices;
 		iid += m->mNumFaces * 3;
@@ -568,7 +571,7 @@ void ModelViewer::load_model(const wchar_t * filename)
 	do
 	{
 		CD3D11_BUFFER_DESC vbDesc(
-			numVertices * sizeof(Vertex),
+			numVertices * sizeof(SkinnedVertex),
 			D3D11_BIND_VERTEX_BUFFER);
 		D3D11_SUBRESOURCE_DATA vbData = { vertices, 0, 0 };
 		if (S_OK != device->CreateBuffer(&vbDesc, &vbData, &vertexBuffer))
@@ -595,9 +598,9 @@ void ModelViewer::load_model(const wchar_t * filename)
 
 void ModelViewer::render_meshes()
 {
-	if (numMeshes == 0) return;
+	if (meshes.empty()) return;
 
-	UINT strides[] = { sizeof(Vertex) };
+	UINT strides[] = { sizeof(SkinnedVertex) };
 	UINT offsets[] = { 0 };
 
 	context->VSSetShader(vertexShader, nullptr, 0);
@@ -613,7 +616,7 @@ void ModelViewer::render_meshes()
 	ID3D11Buffer* cbs[] = { instanceCB, frameCB };
 	context->VSSetConstantBuffers(0, 2, cbs);
 
-	for (uint32_t i = 0; i < numMeshes; i++)
+	for (uint32_t i = 0; i < meshes.size(); i++)
 	{
 		Mesh& m = meshes[i];
 
@@ -623,9 +626,9 @@ void ModelViewer::render_meshes()
 
 void ModelViewer::render_scene()
 {
-	if (numMeshes == 0 || nullptr == scene) return;
+	if (meshes.empty() || nullptr == scene) return;
 
-	UINT strides[] = { sizeof(Vertex) };
+	UINT strides[] = { sizeof(SkinnedVertex) };
 	UINT offsets[] = { 0 };
 
 	context->VSSetShader(vertexShader, nullptr, 0);
@@ -679,8 +682,8 @@ void ModelViewer::render_scene_node(aiNode * node, float4x4 parentTransform)
 int32_t ModelViewer::generate_skeleton(aiNode * node)
 {
 	selectedBone = -1;
-	numBones = 0;
-	boneNameArraySize = 0;
+	bones.clear();
+	boneNameArray.clear();
 	boneTable.clear();
 
 	aiNode* root = node;
@@ -726,15 +729,16 @@ int32_t ModelViewer::generate_skeleton_node(aiNode * node, int32_t parentBoneIdx
 		}
 	}
 
-	int32_t boneId = numBones++;
+	int32_t boneId = int32_t(bones.size());
+	bones.push_back(Bone());
 	Bone& bone = bones[boneId];
 	bone.parent = parentBoneIdx;
 	bone.firstChild = -1;
 	bone.nextSibling = -1;
 
-	bone.name = boneNameArraySize;
-	strcpy(&boneNameArray[boneNameArraySize], nodeName.c_str());
-	boneNameArraySize += uint32_t(nodeName.length()) + 1;
+	bone.name = int32_t(boneNameArray.size());
+	boneNameArray.resize(boneNameArray.size() + nodeName.length() + 1);
+	strcpy(&boneNameArray[bone.name], nodeName.c_str());
 
 	assert(boneTable.find(nodeName) == boneTable.end());
 	boneTable.insert(std::pair<std::string, int32_t>(nodeName, boneId));
@@ -747,6 +751,8 @@ int32_t ModelViewer::generate_skeleton_node(aiNode * node, int32_t parentBoneIdx
 	for (uint32_t i = 0; i < node->mNumChildren; ++i)
 	{
 		int32_t bId = generate_skeleton_node(node->mChildren[i], boneId);
+
+		Bone& bone = bones[boneId];
 		if (bone.firstChild == -1)
 			bone.firstChild = bId;
 		else
@@ -758,13 +764,91 @@ int32_t ModelViewer::generate_skeleton_node(aiNode * node, int32_t parentBoneIdx
 	return boneId;
 }
 
-int32_t ModelViewer::generate_animation(aiAnimation* anim)
+int32_t ModelViewer::generate_animation(aiAnimation* a)
 {
-	if (nullptr == anim) return -1;
+	if (nullptr == a) return -1;
 
-	for (uint32_t i = 0; i < anim->mNumChannels; ++i)
+	if (nullptr != bonesCB)
 	{
-		//anim->mChannels[i]->mPositionKeys
+		bonesCB->Release();
+		bonesCB = nullptr;
+	}
+
+	{
+		CD3D11_BUFFER_DESC desc(
+			sizeof(float4x4) * bones.size(),
+			D3D10_BIND_CONSTANT_BUFFER,
+			D3D11_USAGE_DYNAMIC,
+			D3D11_CPU_ACCESS_WRITE
+		);
+
+		if (S_OK != device->CreateBuffer(&desc, nullptr, &bonesCB))
+		{
+			return -1;
+		}
+	}
+
+	anim = Animation();
+	anim.frameRate = a->mTicksPerSecond == 0.0 ? 1.0f : float(a->mTicksPerSecond);
+	anim.duration = float(a->mDuration);
+	anim.numTracks = a->mNumChannels;
+
+	tracks.clear();
+	tracks.resize(bones.size());
+
+	vectorFrames.clear();
+	quatFrames.clear();
+
+	for (uint32_t i = 0; i < a->mNumChannels; ++i)
+	{
+		auto& ch = a->mChannels[i];
+		std::string nodeName(ch->mNodeName.C_Str());
+		size_t pos = nodeName.find("_$AssimpFbx$_");
+		if (pos != std::string::npos)
+		{
+			nodeName = nodeName.substr(0, pos);
+		}
+
+		if (boneTable.find(nodeName) == boneTable.end())
+			continue;
+		
+		Track& t = tracks[boneTable[nodeName]];
+		
+		t.numTransFrames = ch->mNumPositionKeys;
+		t.transFrames = uint32_t(vectorFrames.size());
+		for (uint32_t f = 0; f < t.numTransFrames; f++)
+		{
+			auto& k = ch->mPositionKeys[f];
+			
+			vectorFrames.push_back(VectorFrame{
+				float3{ k.mValue.x, k.mValue.y, k.mValue.z},
+				float(k.mTime)
+			});
+		}
+
+		t.numRotFrames = ch->mNumRotationKeys;
+		t.rotFrames = uint32_t(quatFrames.size());
+		for (uint32_t f = 0; f < t.numRotFrames; f++)
+		{
+			auto& k = ch->mRotationKeys[f];
+			
+			quatFrames.push_back(QuaternionFrame{
+				float4{ k.mValue.x, k.mValue.y, k.mValue.z, k.mValue.w },
+				float(k.mTime)
+			});
+		}
+
+		t.numScaleFrames = ch->mNumScalingKeys;
+		t.scaleFrames = uint32_t(vectorFrames.size());
+		for (uint32_t f = 0; f < t.numScaleFrames; f++)
+		{
+			auto& k = ch->mScalingKeys[f];
+
+			vectorFrames.push_back(VectorFrame{
+				float3{ k.mValue.x, k.mValue.y, k.mValue.z },
+				float(k.mTime)
+			});
+		}
 	}
 
 	return 0;

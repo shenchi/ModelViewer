@@ -14,7 +14,9 @@ struct Input
 	float3	position : POSITION;
 	float3	normal : NORMAL;
 	float3	tangent : TANGENT;
-	float3	texcoord : TEXCOORD;
+	float3	texcoord : TEXCOORD0;
+	uint4	boneIds : TEXCOORD1;
+	float4	boneWeights : TEXCOORD2;
 };
 
 struct V2F

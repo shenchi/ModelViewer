@@ -2,6 +2,7 @@
 
 #include "Application.h"
 #include "TofuMesh.h"
+#include <vector>
 #include <unordered_map>
 #include <string>
 
@@ -14,6 +15,9 @@ using tofu::math::float4x4;
 using tofu::Mesh;
 using tofu::Bone;
 using tofu::Vertex;
+using tofu::VectorFrame;
+using tofu::QuaternionFrame;
+using tofu::Track;
 using tofu::Animation;
 
 namespace Assimp
@@ -78,20 +82,21 @@ private:
 	uint32_t			numVertices;
 	uint32_t			numIndices;
 
-	Mesh				meshes[1024];
-	uint32_t			numMeshes;
-
-	Bone				bones[1024];
-	uint32_t			numBones;
+	std::vector<Mesh>	meshes;
+	std::vector<Bone>	bones;
 	std::unordered_map<std::string, int32_t> boneTable;
 
-	char				boneNameArray[2048];
-	uint32_t			boneNameArraySize;
+	std::vector<char>	boneNameArray;
 
 	ID3D11Buffer*		instanceCB;
 	ID3D11Buffer*		frameCB;
 
+	ID3D11Buffer*		bonesCB;
+
 	Animation			anim;
+	std::vector<Track>	tracks;
+	std::vector<VectorFrame>		vectorFrames;
+	std::vector<QuaternionFrame>	quatFrames;
 
 private:
 

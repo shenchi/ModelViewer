@@ -44,15 +44,34 @@ namespace tofu
 		uint32_t	numIndices;
 	};
 
+	struct VectorFrame
+	{
+		float3		value;
+		float		time;
+	};
+
+	struct QuaternionFrame
+	{
+		float4		value;
+		float		time;
+	};
+
 	struct Track
 	{
-
+		uint32_t	transFrames;
+		uint32_t	numTransFrames;
+		uint32_t	rotFrames;
+		uint32_t	numRotFrames;
+		uint32_t	scaleFrames;
+		uint32_t	numScaleFrames;
+		uint32_t	_reserved1, _reserved2;
 	};
 
 	struct Animation
 	{
-		uint32_t	frameRate;
-		uint32_t	numFrames;
+		float		frameRate;
+		float		duration;
+		uint32_t	tracks;
 		uint32_t	numTracks;
 	};
 
